@@ -74,8 +74,9 @@ func main() {
 	mux.Handle("/api/", http.StripPrefix("/api", apiMux))
 
 	// Handle the api routes.
-	apiMux.HandleFunc("POST /submit-sat-score", handleApiError(handleSubmitSATForm(db, queries)))
 	apiMux.HandleFunc("GET /search-by-name", handleApiError(handleSearchByName(queries)))
+	apiMux.HandleFunc("GET /get-rank-by-name", handleApiError(handleGetRankByName(queries)))
+	apiMux.HandleFunc("POST /submit-sat-score", handleApiError(handleSubmitSATForm(db, queries)))
 	apiMux.HandleFunc("POST /update-sat-score", handleApiError(handleUpdateSATScore(db, queries)))
 	apiMux.HandleFunc("DELETE /delete-record", handleApiError(handleDeleteRecord(db, queries)))
 	apiMux.HandleFunc("GET /view-all-data", handleApiError(handleViewAllData(queries)))
@@ -203,6 +204,18 @@ func handleSearchByName(queries *database.Queries) func(w http.ResponseWriter, r
 	}
 }
 
+func handleGetRankByName(queries *database.Queries) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		name := r.URL.Query().Get("name")
+		satScore, err := queries.GetSATScoreByName(r.Context(), name)
+		if err != nil {
+			return err
+		}
+		return renderJSON(w, r, http.StatusOK, struct {
+			Rank int `json:"rank"`
+		}{Rank: int(satScore.Rank.Int64)})
+	}
+}
 func handleUpdateSATScore(db *sql.DB, queries *database.Queries) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		tx, err := db.BeginTx(r.Context(), nil)
