@@ -19,6 +19,47 @@ func (q *Queries) DeleteSATScore(ctx context.Context, name string) error {
 	return err
 }
 
+const getNameBySubstring = `-- name: GetNameBySubstring :many
+SELECT id, name, address, city, country, pincode, sat_score, passed, created_at, updated_at, rank FROM sat_scores
+WHERE name LIKE ?
+`
+
+// Retrieve all names that contain a specific substring
+func (q *Queries) GetNameBySubstring(ctx context.Context, name string) ([]SatScore, error) {
+	rows, err := q.db.QueryContext(ctx, getNameBySubstring, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SatScore
+	for rows.Next() {
+		var i SatScore
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Address,
+			&i.City,
+			&i.Country,
+			&i.Pincode,
+			&i.SatScore,
+			&i.Passed,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Rank,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSATScoreByName = `-- name: GetSATScoreByName :one
 SELECT id, name, address, city, country, pincode, sat_score, passed, created_at, updated_at, rank FROM sat_scores WHERE name = ?
 `

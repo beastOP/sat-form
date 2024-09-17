@@ -15,6 +15,11 @@ SELECT * FROM sat_scores ORDER BY rank;
 -- Get a single SAT score record by name
 SELECT * FROM sat_scores WHERE name = ?;
 
+-- name: GetNameBySubstring :many
+-- Retrieve all names that contain a specific substring
+SELECT * FROM sat_scores
+WHERE name LIKE ?;
+
 -- name: InsertSATScore :one
 -- Add a record to the sat score table
 INSERT INTO sat_scores (

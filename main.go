@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,9 +17,24 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
+// The following comment and the variable below is important as it tells the
+// go compiler to embed the migrations folder into the binary.
+//
 //go:embed migrations/*.sql
 var embedMigrations embed.FS
 
+// I opted to only the standard library to implement the http server as it
+// was a small project and I wanted to avoid adding additional dependencies.
+//
+// We start by opening a connection to the database. We then check if we can
+// ping the database. If we can, we run the migrations. If we can't, we log
+// the error and exit.
+//
+// We then create a new servemux and a file server to serve the static files.
+//
+// We then handle the routes.
+//
+// We then start the HTTP server.
 func main() {
 	db, err := sql.Open("sqlite3", "./sat_scores.db")
 	if err != nil {
@@ -41,23 +57,28 @@ func main() {
 		log.Fatalf("Error: %+v", err)
 	}
 
+	// Create the queries struct generated from the `sqlc generate` command
+	// as it is needed to interact with the database.
 	queries := database.New(db)
 
 	mux := http.NewServeMux()
 
-	fs := http.FileServer(http.Dir("static"))
+	fs := http.FileServer(http.Dir("static")) // Creating a file server to serve the static files.
 	mux.Handle("/static/", http.StripPrefix("/static/", fs))
 
+	// Handle the frontend routes.
 	mux.HandleFunc("/", handleHtmlError(handleIndexRoute(queries)))
+	mux.HandleFunc("/update-sat-score-form", handleHtmlError(handleUpdateSATScoreForm(queries)))
 
-	apiMux := http.NewServeMux()
+	apiMux := http.NewServeMux() // Creating `/api` group for api routes.
 	mux.Handle("/api/", http.StripPrefix("/api", apiMux))
 
-	apiMux.HandleFunc("/submit-sat-score", handleApiError(handleSubmitSATForm(db, queries)))
-	apiMux.HandleFunc("/get-rank", handleGetRank)
-	apiMux.HandleFunc("/update-sat-score", handleUpdateSATScore)
-	apiMux.HandleFunc("/delete-record", handleDeleteRecord)
-	apiMux.HandleFunc("/view-all-data", handleViewAllData)
+	// Handle the api routes.
+	apiMux.HandleFunc("POST /submit-sat-score", handleApiError(handleSubmitSATForm(db, queries)))
+	apiMux.HandleFunc("GET /search-by-name", handleApiError(handleSearchByName(queries)))
+	apiMux.HandleFunc("POST /update-sat-score", handleApiError(handleUpdateSATScore(db, queries)))
+	apiMux.HandleFunc("DELETE /delete-record", handleApiError(handleDeleteRecord(db, queries)))
+	apiMux.HandleFunc("GET /view-all-data", handleApiError(handleViewAllData(queries)))
 
 	fmt.Println("Listening on localhost:5000")
 	err = http.ListenAndServe("localhost:5000", mux)
@@ -67,14 +88,14 @@ func main() {
 }
 
 func renderJSON(w http.ResponseWriter, r *http.Request, statusCode int, data any) error {
-	w.WriteHeader(statusCode)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
 	return json.NewEncoder(w).Encode(data)
 }
 
 func render(w http.ResponseWriter, r *http.Request, statusCode int, t templ.Component) error {
-	w.WriteHeader(statusCode)
 	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(statusCode)
 	return t.Render(r.Context(), w)
 }
 
@@ -113,6 +134,17 @@ func handleIndexRoute(queries *database.Queries) func(w http.ResponseWriter, r *
 	}
 }
 
+func handleUpdateSATScoreForm(queries *database.Queries) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		name := r.URL.Query().Get("name")
+		satScore, err := queries.GetSATScoreByName(r.Context(), name)
+		if err != nil {
+			return err
+		}
+		return render(w, r, http.StatusOK, templates.UpdateForm(satScore.Name, satScore.SatScore))
+	}
+}
+
 func handleSubmitSATForm(db *sql.DB, queries *database.Queries) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		tx, err := db.BeginTx(r.Context(), nil)
@@ -124,6 +156,9 @@ func handleSubmitSATForm(db *sql.DB, queries *database.Queries) func(w http.Resp
 		satScore, err := strconv.ParseInt(r.FormValue("sat_score"), 10, 64)
 		if err != nil {
 			return err
+		}
+		if satScore < 0 || satScore > 100 {
+			return errors.New("value out of range (0-100)")
 		}
 		newSatScore := database.InsertSATScoreParams{
 			Name:     r.FormValue("name"),
@@ -156,14 +191,102 @@ func handleSubmitSATForm(db *sql.DB, queries *database.Queries) func(w http.Resp
 	}
 }
 
-func handleGetRank(w http.ResponseWriter, r *http.Request) {
+func handleSearchByName(queries *database.Queries) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		name := r.URL.Query().Get("name")
+		like := "%" + name + "%"
+		satScores, err := queries.GetNameBySubstring(r.Context(), like)
+		if err != nil {
+			return err
+		}
+		return render(w, r, http.StatusOK, templates.Table(satScores))
+	}
 }
 
-func handleUpdateSATScore(w http.ResponseWriter, r *http.Request) {
+func handleUpdateSATScore(db *sql.DB, queries *database.Queries) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		tx, err := db.BeginTx(r.Context(), nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		queries = queries.WithTx(tx)
+		satScore, err := strconv.ParseInt(r.FormValue("sat_score"), 10, 64)
+		if err != nil {
+			return err
+		}
+		if satScore < 0 || satScore > 100 {
+			return errors.New("value out of range (0-100)")
+		}
+		_, err = queries.UpdateSATScore(r.Context(), database.UpdateSATScoreParams{
+			Name:     r.FormValue("name"),
+			SatScore: satScore,
+			Passed:   satScore >= 30,
+		})
+		if err != nil {
+			return err
+		}
+		err = queries.UpdateSATScoreRanks(r.Context())
+		if err != nil {
+			log.Printf("Error: %+v", err)
+			tx.Rollback()
+			return err
+		}
+		satScores, err := queries.GetSATScores(r.Context())
+		if err != nil {
+			log.Printf("Error: %+v", err)
+			tx.Rollback()
+			return err
+		}
+		tx.Commit()
+		render(w, r, http.StatusOK, templates.FormWithTable(satScores))
+		return nil
+	}
 }
 
-func handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
+func handleDeleteRecord(db *sql.DB, queries *database.Queries) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		name := r.URL.Query().Get("name")
+		tx, err := db.BeginTx(r.Context(), nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		queries = queries.WithTx(tx)
+		err = queries.DeleteSATScore(r.Context(), name)
+		if err != nil {
+			return err
+		}
+		err = queries.UpdateSATScoreRanks(r.Context())
+		if err != nil {
+			log.Printf("Error: %+v", err)
+			tx.Rollback()
+			return err
+		}
+		satScores, err := queries.GetSATScores(r.Context())
+		if err != nil {
+			log.Printf("Error: %+v", err)
+			tx.Rollback()
+			return err
+		}
+		tx.Commit()
+		render(w, r, http.StatusOK, templates.Table(satScores))
+		return nil
+	}
 }
 
-func handleViewAllData(w http.ResponseWriter, r *http.Request) {
+func handleViewAllData(queries *database.Queries) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		satScores, err := queries.GetSATScores(r.Context())
+		if err != nil {
+			return err
+		}
+		err = renderJSON(w, r, http.StatusOK, struct {
+			SatScores []database.SatScore `json:"sat_scores"`
+		}{SatScores: satScores})
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 }

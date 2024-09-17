@@ -3,6 +3,7 @@
 ## Description
 
 This project is a simple web application in golang that allows users to do the following:
+
 - Submit SAT Results and assign a rank to the record based on the SAT score
 - View them all in a table
 - Get a rank based on the name provided
@@ -13,6 +14,7 @@ This project is a simple web application in golang that allows users to do the f
 ## Database Design
 
 ### SAT Score Table
+
 - id (unique)
 - name (unique)
 - address
@@ -29,17 +31,33 @@ This project is a simple web application in golang that allows users to do the f
 
 - Backend: Golang
 - Database: SQLite
-- Frontend: Templ, TailwindCSS, HTMX, AlpineJS
+- Frontend: Templ, TailwindCSS, HTMX
 
 ## Plan
 
-- [X] Setup http server to handle requests, and define the necessary handlers
-- [X] Setup the database and create the necessary tables
-- [X] Setup the empty frontend
+- [x] Setup http server to handle requests, and define the necessary handlers
+- [x] Setup the database and create the necessary tables
+- [x] Setup the empty frontend
 - [ ] Implement that handlers one by one
-    - [X] Submit SAT Score
-    - [ ] Delete SAT Score
-    - [ ] View all data in JSON format
-    - [ ] Search for a SAT Score by name
-    - [ ] Update SAT Score
+  - [x] Submit SAT Score
+  - [x] Delete SAT Score
+  - [x] View all data in JSON format
+  - [x] Full text search for a SAT Score by name
+  - [x] Update SAT Score
 - [ ] Add tailwind
+
+## Installation
+
+Clone the repository and run the following command to install the dependencies:
+
+```bash
+go mod tidy
+```
+
+## Running the project
+
+Run the following command to start the server:
+
+```bash
+make run
+```
