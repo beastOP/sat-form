@@ -1,12 +1,44 @@
 package main
 
 import (
+	"database/sql"
+	"embed"
 	"fmt"
 	"log"
 	"net/http"
+	"sat-form/database"
+
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/pressly/goose/v3"
 )
 
+//go:embed migrations/*.sql
+var embedMigrations embed.FS
+
 func main() {
+	db, err := sql.Open("sqlite3", "./sat_scores.db")
+	if err != nil {
+		log.Fatalf("Error: %+v", err)
+	}
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Error: %+v", err)
+	}
+	log.Println("Connected to database")
+	defer db.Close()
+
+	goose.SetBaseFS(embedMigrations)
+
+	if err := goose.SetDialect("sqlite3"); err != nil {
+		log.Fatalf("Error: %+v", err)
+	}
+
+	err = goose.Up(db, "migrations")
+	if err != nil {
+		log.Fatalf("Error: %+v", err)
+	}
+
+	_ = database.New(db)
+
 	mux := http.NewServeMux()
 
 	fs := http.FileServer(http.Dir("static"))
@@ -24,7 +56,7 @@ func main() {
 	apiMux.HandleFunc("/view-all-data", handleViewAllData)
 
 	fmt.Println("Listening on localhost:5000")
-	err := http.ListenAndServe("localhost:5000", mux)
+	err = http.ListenAndServe("localhost:5000", mux)
 	if err != nil {
 		log.Fatalf("Error: %+v", err)
 	}
