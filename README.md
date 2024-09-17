@@ -44,7 +44,7 @@ This project is a simple web application in golang that allows users to do the f
   - [x] View all data in JSON format
   - [x] Full text search for a SAT Score by name
   - [x] Update SAT Score
-  - [ ] Get rank by name
+  - [X] Get rank by nam
 - [ ] Add tailwind
 
 ## Installation
