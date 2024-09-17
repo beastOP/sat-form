@@ -38,6 +38,6 @@ This project is a simple web application in golang that allows users to do the f
 ## Plan
 
 - [X] Setup http server to handle requests, and define the necessary handlers
-- [ ] Setup the database and create the necessary tables
+- [X] Setup the database and create the necessary tables
 - [ ] Setup the empty frontend
 - [ ] Implement that handlers one by one
