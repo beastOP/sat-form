@@ -1,11 +1,13 @@
 MIGRATIONS_DIR = ./migrations
+SEED_DIR = ./seed
+DB_URL = ./sat_scores.db
 
 run:
 	@go run ./...
 
 generate:
 	@templ generate
-	
+
 create-migration:
 	@goose -dir ${MIGRATIONS_DIR} create ${NAME} sql
 
@@ -18,4 +20,7 @@ rollback:
 sqlc-generate:
 	@sqlc generate
 
-.PHONY: run create-migration migrate rollback sqlc-generate
+templ-generate:
+	@templ generate
+
+.PHONY: run create-migration migrate rollback sqlc-generate templ-generate

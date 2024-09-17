@@ -23,11 +23,7 @@ This project is a simple web application in golang that allows users to do the f
 - passed (boolean, true if sat_score is greater than 30% else false)
 - created_at
 - updated_at
-
-### Rank Table
-- id (unique)
 - rank
-- sat_score_id (foreign key)
 
 ## Technologies
 
@@ -41,3 +37,9 @@ This project is a simple web application in golang that allows users to do the f
 - [X] Setup the database and create the necessary tables
 - [X] Setup the empty frontend
 - [ ] Implement that handlers one by one
+    - [X] Submit SAT Score
+    - [ ] Delete SAT Score
+    - [ ] View all data in JSON format
+    - [ ] Search for a SAT Score by name
+    - [ ] Update SAT Score
+- [ ] Add tailwind

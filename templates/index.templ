@@ -1,15 +1,75 @@
 package templates
 
-templ Index() {
+import (
+    "strconv"
+    "sat-form/database"
+)
+
+templ Index(satScores []database.SatScore) {
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <script src="https://unpkg.com/htmx.org@2.0.2" integrity="sha384-Y7hw+L/jvKeWIRRkqWYfPcvVxHzVzn5REgzbawhxAuQGwX1XWe70vji+VSeHOThJ" crossorigin="anonymous"></script>
         <title>SAT Form</title>
     </head>
     <body>
         <h1>SAT Form</h1>
+        <form hx-post="/api/submit-sat-score" hx-swap="outerHTML" hx-target="#sat-scores" hx-on::after-request="if(event.detail.successful) this.reset()">
+            <label for="name">Name:</label>
+            <input type="text" id="name" name="name" required />
+            <label for="address">Address:</label>
+            <input type="text" id="address" name="address" required />
+            <label for="city">City:</label>
+            <input type="text" id="city" name="city" required />
+            <label for="country">Country:</label>
+            <input type="text" id="country" name="country" required />
+            <label for="pincode">Pincode:</label>
+            <input type="text" id="pincode" name="pincode" required />
+            <label for="sat_score">SAT Score:</label>
+            <input type="number" id="sat_score" name="sat_score" required />
+            <button type="submit">Submit</button>
+        </form>
+        @Table(satScores)
     </body>
     </html>
+}
+
+templ Error(message string) {
+    <div class="error">{message}</div>
+}
+
+templ Table(satScores []database.SatScore) {
+    <table id="sat-scores"> 
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>SAT Score</th>
+                <th>Passed</th>
+            </tr>
+        </thead>
+        <tbody>
+            if len(satScores) == 0 {
+                <tr>
+                    <td colspan="4">No data found</td>
+                </tr>
+            } else {
+                for _, satScore := range satScores {
+                    @TableRow(satScore)
+                }
+            }
+        </tbody>
+    </table>
+}
+
+
+templ TableRow(satScore database.SatScore) {
+    <tr>
+        <td>{strconv.Itoa(int(satScore.Rank.Int64))}</td>
+        <td>{satScore.Name}</td>
+        <td>{strconv.Itoa(int(satScore.SatScore))}</td>
+        <td>{strconv.FormatBool(satScore.Passed)}</td>
+    </tr>
 }

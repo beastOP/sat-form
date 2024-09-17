@@ -3,11 +3,13 @@ package main
 import (
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"sat-form/database"
 	"sat-form/templates"
+	"strconv"
 
 	"github.com/a-h/templ"
 	_ "github.com/mattn/go-sqlite3"
@@ -39,19 +41,19 @@ func main() {
 		log.Fatalf("Error: %+v", err)
 	}
 
-	_ = database.New(db)
+	queries := database.New(db)
 
 	mux := http.NewServeMux()
 
 	fs := http.FileServer(http.Dir("static"))
 	mux.Handle("/static/", http.StripPrefix("/static/", fs))
 
-	mux.HandleFunc("/", handleIndexRoute)
+	mux.HandleFunc("/", handleHtmlError(handleIndexRoute(queries)))
 
 	apiMux := http.NewServeMux()
 	mux.Handle("/api/", http.StripPrefix("/api", apiMux))
 
-	apiMux.HandleFunc("/submit-sat-score", handleSubmitSATForm)
+	apiMux.HandleFunc("/submit-sat-score", handleApiError(handleSubmitSATForm(db, queries)))
 	apiMux.HandleFunc("/get-rank", handleGetRank)
 	apiMux.HandleFunc("/update-sat-score", handleUpdateSATScore)
 	apiMux.HandleFunc("/delete-record", handleDeleteRecord)
@@ -64,21 +66,94 @@ func main() {
 	}
 }
 
+func renderJSON(w http.ResponseWriter, r *http.Request, statusCode int, data any) error {
+	w.WriteHeader(statusCode)
+	w.Header().Set("Content-Type", "application/json")
+	return json.NewEncoder(w).Encode(data)
+}
+
 func render(w http.ResponseWriter, r *http.Request, statusCode int, t templ.Component) error {
 	w.WriteHeader(statusCode)
 	w.Header().Set("Content-Type", "text/html")
 	return t.Render(r.Context(), w)
 }
 
-func handleIndexRoute(w http.ResponseWriter, r *http.Request) {
-	index := templates.Index()
-	err := render(w, r, http.StatusOK, index)
-	if err != nil {
-		log.Printf("Error: %+v", err)
+func handleHtmlError(f func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		err := f(w, r)
+		if err != nil {
+			log.Printf("Error: %+v", err)
+			render(w, r, http.StatusInternalServerError, templates.Error(err.Error()))
+		}
 	}
 }
 
-func handleSubmitSATForm(w http.ResponseWriter, r *http.Request) {
+func handleApiError(f func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		err := f(w, r)
+		if err != nil {
+			log.Printf("Error: %+v", err)
+			renderJSON(w, r, http.StatusInternalServerError, err.Error())
+		}
+	}
+}
+
+func handleIndexRoute(queries *database.Queries) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		satScores, err := queries.GetSATScores(r.Context())
+		if err != nil {
+			return err
+		}
+		index := templates.Index(satScores)
+		err = render(w, r, http.StatusOK, index)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+func handleSubmitSATForm(db *sql.DB, queries *database.Queries) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		tx, err := db.BeginTx(r.Context(), nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		queries = queries.WithTx(tx)
+		satScore, err := strconv.ParseInt(r.FormValue("sat_score"), 10, 64)
+		if err != nil {
+			return err
+		}
+		newSatScore := database.InsertSATScoreParams{
+			Name:     r.FormValue("name"),
+			Address:  r.FormValue("address"),
+			City:     r.FormValue("city"),
+			Country:  r.FormValue("country"),
+			Pincode:  r.FormValue("pincode"),
+			SatScore: satScore,
+			Passed:   satScore >= 30,
+		}
+		_, err = queries.InsertSATScore(r.Context(), newSatScore)
+		if err != nil {
+			return err
+		}
+		err = queries.UpdateSATScoreRanks(r.Context())
+		if err != nil {
+			log.Printf("Error: %+v", err)
+			tx.Rollback()
+			return err
+		}
+		satScores, err := queries.GetSATScores(r.Context())
+		if err != nil {
+			log.Printf("Error: %+v", err)
+			tx.Rollback()
+			return err
+		}
+		tx.Commit()
+		render(w, r, http.StatusOK, templates.Table(satScores))
+		return nil
+	}
 }
 
 func handleGetRank(w http.ResponseWriter, r *http.Request) {
