@@ -3,6 +3,7 @@ module sat-form
 go 1.22.5
 
 require (
+	github.com/a-h/templ v0.2.778
 	github.com/mattn/go-sqlite3 v1.14.23
 	github.com/pressly/goose/v3 v3.22.1
 )

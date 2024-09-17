@@ -3,6 +3,9 @@ MIGRATIONS_DIR = ./migrations
 run:
 	@go run ./...
 
+generate:
+	@templ generate
+	
 create-migration:
 	@goose -dir ${MIGRATIONS_DIR} create ${NAME} sql
 

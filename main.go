@@ -7,7 +7,9 @@ import (
 	"log"
 	"net/http"
 	"sat-form/database"
+	"sat-form/templates"
 
+	"github.com/a-h/templ"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pressly/goose/v3"
 )
@@ -62,16 +64,18 @@ func main() {
 	}
 }
 
-func handleIndexRoute(w http.ResponseWriter, r *http.Request) {
-	html := `<!DOCTYPE html>
-	<html lang="en">
-	<body>
-		<h1>Hello world</h1>
-	</body>
-	</html>`
+func render(w http.ResponseWriter, r *http.Request, statusCode int, t templ.Component) error {
+	w.WriteHeader(statusCode)
 	w.Header().Set("Content-Type", "text/html")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(html))
+	return t.Render(r.Context(), w)
+}
+
+func handleIndexRoute(w http.ResponseWriter, r *http.Request) {
+	index := templates.Index()
+	err := render(w, r, http.StatusOK, index)
+	if err != nil {
+		log.Printf("Error: %+v", err)
+	}
 }
 
 func handleSubmitSATForm(w http.ResponseWriter, r *http.Request) {
